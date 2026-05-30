@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { MoonBall } from "@/components/MoonBall";
+import { ParticleField } from "@/components/ParticleField";
 import { EmotionOrb } from "@/components/EmotionOrb";
 import { DiaryInput } from "@/components/DiaryInput";
 import { AdGate } from "@/components/AdGate";
@@ -40,6 +41,7 @@ export default function HomePage() {
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
   const [moonColor, setMoonColor] = useState("#8899aa");
   const [pulseSignal, setPulseSignal] = useState(0);
+  const [burstSignal, setBurstSignal] = useState(0);
   const [analyzing, setAnalyzing] = useState(false);
   const [showAd, setShowAd] = useState(false);
   const [pendingResult, setPendingResult] = useState<AnalyzeResult | null>(null);
@@ -105,6 +107,8 @@ export default function HomePage() {
   const handleOrbAbsorbed = useCallback(() => {
     setOrbProps(null);
     setPulseSignal(p => p + 1);
+    setBurstSignal(b => b + 1);
+    logEvent("particle_burst");
   }, []);
 
   const handleMonthView = useCallback(() => {
@@ -165,7 +169,8 @@ export default function HomePage() {
               </motion.p>
             </div>
 
-            <div ref={moonRef} style={{ marginTop: 24, marginBottom: 28 }}>
+            <div ref={moonRef} style={{ marginTop: 24, marginBottom: 28, position: "relative" }}>
+              <ParticleField color={moonColor} size={240} burstSignal={burstSignal} />
               <MoonBall color={moonColor} size={240} pulseSignal={pulseSignal} />
             </div>
 
