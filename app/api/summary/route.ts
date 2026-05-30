@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
         "HTTP-Referer": "https://aurora-diary.vercel.app",
       },
       body: JSON.stringify({
-        model: "meta-llama/llama-3.3-70b-instruct:free",
+        model: "qwen/qwen-2.5-72b-instruct:free",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: `${month}の記録:\n${digest}` },

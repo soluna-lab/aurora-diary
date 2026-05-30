@@ -35,17 +35,17 @@ export function MoonBall({ color, size = 280, pulseSignal = 0 }: MoonBallProps) 
       {/* SVG feTurbulence による外縁ガス揺らぎ */}
       <svg width={0} height={0} style={{ position: "absolute" }}>
         <defs>
-          <filter id="aurora-turbulence" x="-20%" y="-20%" width="140%" height="140%">
+          <filter id="aurora-turbulence" x="-25%" y="-25%" width="150%" height="150%">
             <feTurbulence
               type="fractalNoise"
               baseFrequency="0.012 0.008"
-              numOctaves="3"
+              numOctaves="4"
               seed="5"
               result="noise"
             >
               <animate
                 attributeName="baseFrequency"
-                values="0.012 0.008;0.016 0.012;0.010 0.006;0.012 0.008"
+                values="0.012 0.008;0.018 0.013;0.009 0.006;0.015 0.010;0.012 0.008"
                 dur="14s"
                 repeatCount="indefinite"
                 className="aurora-turbulence"
@@ -54,7 +54,7 @@ export function MoonBall({ color, size = 280, pulseSignal = 0 }: MoonBallProps) 
             <feDisplacementMap
               in="SourceGraphic"
               in2="noise"
-              scale="18"
+              scale="45"
               xChannelSelector="R"
               yChannelSelector="G"
             />
