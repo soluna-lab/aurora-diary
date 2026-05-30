@@ -29,27 +29,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "text required" }, { status: 400 });
   }
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     return NextResponse.json(fallback(text), { status: 200 });
   }
 
   try {
-    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://aurora-diary.vercel.app",
       },
       body: JSON.stringify({
-        model: "qwen/qwen-2.5-72b-instruct:free",
+        model: "llama-3.3-70b-versatile",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: text.slice(0, 300) },
         ],
         max_tokens: 200,
         temperature: 0.3,
+        response_format: { type: "json_object" },
       }),
     });
 
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
 
     const data = await res.json() as { choices: { message: { content: string } }[] };
     const raw = data.choices?.[0]?.message?.content ?? "";
-    const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim()) as {
+    const parsed = JSON.parse(raw) as {
       emotion: Emotion;
       intensity: number;
       keywords: string[];

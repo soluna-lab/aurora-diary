@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ text: "記録のなかった静かな月でした" });
   }
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ text: buildFallbackSummary(entries) });
   }
@@ -36,21 +36,21 @@ export async function POST(req: NextRequest) {
     .slice(0, 1500);
 
   try {
-    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://aurora-diary.vercel.app",
       },
       body: JSON.stringify({
-        model: "qwen/qwen-2.5-72b-instruct:free",
+        model: "llama-3.3-70b-versatile",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: `${month}の記録:\n${digest}` },
         ],
         max_tokens: 100,
         temperature: 0.7,
+        response_format: { type: "json_object" },
       }),
     });
 
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
 
     const data = await res.json() as { choices: { message: { content: string } }[] };
     const raw = data.choices?.[0]?.message?.content ?? "";
-    const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim()) as { text: string };
+    const parsed = JSON.parse(raw) as { text: string };
     return NextResponse.json({ text: (parsed.text ?? "").slice(0, 60) });
   } catch {
     return NextResponse.json({ text: buildFallbackSummary(entries) });
