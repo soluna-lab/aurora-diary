@@ -202,9 +202,10 @@ export default function HomePage() {
             initial={{ opacity: 0, x: 30 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -30 }}
-            style={{ width: "100%", maxWidth: 480, padding: "48px 20px 60px", display: "flex", flexDirection: "column", gap: 24 }}
+            style={{ width: "100%", maxWidth: 480, paddingTop: 48, paddingBottom: 60, display: "flex", flexDirection: "column" }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {/* ヘッダー */}
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "0 20px", marginBottom: 28 }}>
               <button
                 onClick={() => setView("home")}
                 style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", background: "none", border: "none", cursor: "pointer" }}
@@ -216,48 +217,43 @@ export default function HomePage() {
               </h2>
             </div>
 
-            <div style={{ display: "flex", justifyContent: "center" }}>
-              <MoonBall color={moonColor} size={160} />
-            </div>
+            {/* カーテン（全幅） */}
+            <ColorTimeline entries={entries} ym={ym} />
 
-            <div>
-              <p style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", marginBottom: 16, letterSpacing: "0.08em" }}>
-                今月の揺らぎ
-              </p>
-              <ColorTimeline entries={entries} />
-            </div>
-
-            <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 14, padding: "16px 20px" }}>
-              {monthSummary ? (
-                <p style={{ fontSize: 14, color: "rgba(255,255,255,0.65)", lineHeight: 1.7, letterSpacing: "0.04em" }}>
-                  {monthSummary}
-                </p>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start" }}>
-                  <p style={{ fontSize: 12, color: "rgba(255,255,255,0.3)" }}>
-                    {entries.length > 0 ? "今月の流れを眺めてみる" : "記録が溜まるとここに流れが現れます"}
+            {/* サマリー・壁紙 */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: "28px 20px 0" }}>
+              <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 14, padding: "16px 20px" }}>
+                {monthSummary ? (
+                  <p style={{ fontSize: 14, color: "rgba(255,255,255,0.65)", lineHeight: 1.7, letterSpacing: "0.04em" }}>
+                    {monthSummary}
                   </p>
-                  {entries.length > 0 && !summaryLoading && (
-                    <button
-                      onClick={() => setShowSummaryAd(true)}
-                      style={{
-                        fontSize: 12, padding: "6px 16px", borderRadius: 16,
-                        background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-                        color: "rgba(255,255,255,0.5)", cursor: "pointer",
-                      }}
-                    >
-                      今月の色を読む
-                    </button>
-                  )}
-                  {summaryLoading && (
-                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.3)" }}>読んでいます…</p>
-                  )}
-                </div>
-              )}
-            </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start" }}>
+                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.3)" }}>
+                      {entries.length > 0 ? "今月の流れを眺めてみる" : "記録が溜まるとここに流れが現れます"}
+                    </p>
+                    {entries.length > 0 && !summaryLoading && (
+                      <button
+                        onClick={() => setShowSummaryAd(true)}
+                        style={{
+                          fontSize: 12, padding: "6px 16px", borderRadius: 16,
+                          background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+                          color: "rgba(255,255,255,0.5)", cursor: "pointer",
+                        }}
+                      >
+                        今月の色を読む
+                      </button>
+                    )}
+                    {summaryLoading && (
+                      <p style={{ fontSize: 12, color: "rgba(255,255,255,0.3)" }}>読んでいます…</p>
+                    )}
+                  </div>
+                )}
+              </div>
 
-            <div style={{ display: "flex", justifyContent: "center" }}>
-              <WallpaperExport moonColor={moonColor} month={monthLabel(ym)} entryCount={entries.length} />
+              <div style={{ display: "flex", justifyContent: "center" }}>
+                <WallpaperExport moonColor={moonColor} month={monthLabel(ym)} entryCount={entries.length} />
+              </div>
             </div>
           </motion.div>
         )}

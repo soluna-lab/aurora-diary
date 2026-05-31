@@ -30,3 +30,20 @@ textarea {
 @media (prefers-reduced-motion: reduce) {
   .aurora-turbulence { animation: none !important; }
 }
+
+@keyframes curtainSway0 {
+  0%, 100% { transform: rotate(0deg); }
+  50%       { transform: rotate(1.5deg); }
+}
+@keyframes curtainSway1 {
+  0%, 100% { transform: rotate(0deg); }
+  50%       { transform: rotate(-1.2deg); }
+}
+@keyframes curtainSway2 {
+  0%, 100% { transform: rotate(0deg); }
+  50%       { transform: rotate(2deg); }
+}
+@keyframes curtainSway3 {
+  0%, 100% { transform: rotate(0deg); }
+  50%       { transform: rotate(-0.8deg); }
+}
