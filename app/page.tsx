@@ -9,9 +9,13 @@ import { AdGate } from "@/components/AdGate";
 import { ColorTimeline } from "@/components/ColorTimeline";
 import { ShareButton } from "@/components/ShareButton";
 import { logEvent, initSessionTracking } from "@/lib/logEvent";
-import { getEntriesForMonth, upsertEntry } from "@/lib/storage";
+import {
+  getEntriesForMonth, upsertEntry,
+  getFragmentsForDate, getAllFragments, addFragment, removeFragment,
+  clearFragmentsForDate, getOldFragmentDates,
+} from "@/lib/storage";
 import { blendColors } from "@/lib/emotions";
-import type { DiaryEntry, AnalyzeResult } from "@/lib/types";
+import type { DiaryEntry, DailyFragment, AnalyzeResult } from "@/lib/types";
 import dynamic from "next/dynamic";
 
 const WallpaperExport = dynamic(
@@ -21,7 +25,7 @@ const WallpaperExport = dynamic(
 
 type View = "home" | "month";
 
-function today(): string {
+function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
@@ -37,72 +41,129 @@ function monthLabel(ym: string): string {
 
 export default function HomePage() {
   const [view, setView] = useState<View>("home");
-  const [selectedDate, setSelectedDate] = useState(today());
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
+  const [fragments, setFragments] = useState<DailyFragment[]>([]);
   const [moonColor, setMoonColor] = useState("#8899aa");
   const [pulseSignal, setPulseSignal] = useState(0);
   const [burstSignal, setBurstSignal] = useState(0);
   const [analyzing, setAnalyzing] = useState(false);
   const [showAd, setShowAd] = useState(false);
-  const [pendingResult, setPendingResult] = useState<AnalyzeResult | null>(null);
   const [orbProps, setOrbProps] = useState<{ color: string; moonCenter: { x: number; y: number }; startPos: { x: number; y: number } } | null>(null);
   const [showSummaryAd, setShowSummaryAd] = useState(false);
   const [monthSummary, setMonthSummary] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const moonRef = useRef<HTMLDivElement>(null);
 
+  const ym = currentMonth();
+
   const loadEntries = useCallback(() => {
-    const data = getEntriesForMonth(currentMonth());
+    const data = getEntriesForMonth(ym);
     setEntries(data);
     setMoonColor(blendColors(data.map(e => ({ color: e.color, intensity: e.intensity }))));
+  }, [ym]);
+
+  const loadFragments = useCallback(() => {
+    setFragments(getFragmentsForDate(todayStr()));
   }, []);
+
+  // 前日以前の未確定断片を自動確定（サイレント・1回/日付）
+  const autocrystallizeOld = useCallback(async () => {
+    const today = todayStr();
+    const oldDates = getOldFragmentDates(today);
+    if (oldDates.length === 0) return;
+
+    for (const date of oldDates) {
+      const dayFragments = getAllFragments().filter(f => f.date === date);
+      if (dayFragments.length === 0) continue;
+      try {
+        const res = await fetch("/api/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ texts: dayFragments.map(f => f.text) }),
+        });
+        if (res.ok) {
+          const result: AnalyzeResult = await res.json();
+          upsertEntry(date, result, dayFragments.map(f => f.text));
+          clearFragmentsForDate(date);
+          logEvent("auto_crystallize", { date, fragment_count: dayFragments.length });
+        }
+      } catch { /* silently fail — fragments remain for next attempt */ }
+    }
+    loadEntries();
+  }, [loadEntries]);
 
   useEffect(() => {
     const cleanup = initSessionTracking();
     loadEntries();
+    loadFragments();
+    autocrystallizeOld();
     return cleanup;
-  }, [loadEntries]);
+  }, [loadEntries, loadFragments, autocrystallizeOld]);
 
-  const handlePush = useCallback(async (text: string) => {
+  // 断片追加（API 不使用）
+  const handleAddFragment = useCallback((text: string) => {
+    addFragment(todayStr(), text);
+    loadFragments();
+    logEvent("fragment_add", { text_length: text.length });
+  }, [loadFragments]);
+
+  // 断片削除
+  const handleRemoveFragment = useCallback((id: string) => {
+    removeFragment(id);
+    loadFragments();
+  }, [loadFragments]);
+
+  // 確定ボタン → 広告ゲートを開く
+  const handleCrystallize = useCallback(() => {
+    if (fragments.length === 0) return;
+    logEvent("crystallize_intent", { fragment_count: fragments.length });
+    setShowAd(true);
+  }, [fragments]);
+
+  // 広告完了 → API 呼び出し → オーブアニメーション
+  const handleAdComplete = useCallback(async () => {
+    setShowAd(false);
+    const currentFragments = getFragmentsForDate(todayStr());
+    if (currentFragments.length === 0) return;
+
     setAnalyzing(true);
-    logEvent("diary_push_intent", { text_length: text.length });
+    const date = todayStr();
+    const texts = currentFragments.map(f => f.text);
+
     try {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ texts }),
       });
       const result: AnalyzeResult = await res.json();
-      setPendingResult({ ...result, summary: text });
-      setShowAd(true);
+
+      const moonRect = moonRef.current?.getBoundingClientRect();
+      const moonCenter = moonRect
+        ? { x: moonRect.left + moonRect.width / 2, y: moonRect.top + moonRect.height / 2 }
+        : { x: window.innerWidth / 2, y: 220 };
+      const startPos = { x: window.innerWidth / 2, y: window.innerHeight * 0.72 };
+
+      setOrbProps({ color: result.color, moonCenter, startPos });
+
+      upsertEntry(date, result, texts);
+      clearFragmentsForDate(date);
+      loadFragments();
+      loadEntries();
+
+      logEvent("diary_crystallize", {
+        emotion: result.emotion,
+        color: result.color,
+        intensity: result.intensity,
+        fragment_count: texts.length,
+        emotion_blend: result.emotions.map(e => `${e.emotion}:${Math.round(e.weight * 100)}`).join(","),
+      });
     } catch {
+      // fail silently — fragments remain
+    } finally {
       setAnalyzing(false);
     }
-  }, []);
-
-  const handleAdComplete = useCallback(() => {
-    setShowAd(false);
-    if (!pendingResult) { setAnalyzing(false); return; }
-
-    const moonRect = moonRef.current?.getBoundingClientRect();
-    const moonCenter = moonRect
-      ? { x: moonRect.left + moonRect.width / 2, y: moonRect.top + moonRect.height / 2 }
-      : { x: window.innerWidth / 2, y: 220 };
-    const startPos = { x: window.innerWidth / 2, y: window.innerHeight * 0.72 };
-
-    setOrbProps({ color: pendingResult.color, moonCenter, startPos });
-
-    upsertEntry(selectedDate, pendingResult, pendingResult.summary);
-    logEvent("diary_push", {
-      emotion: pendingResult.emotion,
-      color: pendingResult.color,
-      intensity: pendingResult.intensity,
-      text_length: pendingResult.summary.length,
-    });
-    loadEntries();
-    setPendingResult(null);
-    setAnalyzing(false);
-  }, [pendingResult, selectedDate, loadEntries]);
+  }, [loadFragments, loadEntries]);
 
   const handleOrbAbsorbed = useCallback(() => {
     setOrbProps(null);
@@ -126,7 +187,7 @@ export default function HomePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           entries: entries.map(e => ({ emotion: e.emotion, intensity: e.intensity, summary: e.summary })),
-          month: monthLabel(currentMonth()),
+          month: monthLabel(ym),
         }),
       });
       const { text } = await res.json() as { text: string };
@@ -134,9 +195,7 @@ export default function HomePage() {
     } finally {
       setSummaryLoading(false);
     }
-  }, [entries]);
-
-  const ym = currentMonth();
+  }, [entries, ym]);
 
   return (
     <main style={{ minHeight: "100svh", background: "var(--bg)", display: "flex", flexDirection: "column", alignItems: "center" }}>
@@ -183,9 +242,10 @@ export default function HomePage() {
 
             <div style={{ width: "100%" }}>
               <DiaryInput
-                selectedDate={selectedDate}
-                onDateChange={setSelectedDate}
-                onPush={handlePush}
+                fragments={fragments}
+                onAdd={handleAddFragment}
+                onRemove={handleRemoveFragment}
+                onCrystallize={handleCrystallize}
                 loading={analyzing}
               />
             </div>
@@ -204,7 +264,6 @@ export default function HomePage() {
             exit={{ opacity: 0, x: -30 }}
             style={{ width: "100%", maxWidth: 480, paddingTop: 48, paddingBottom: 60, display: "flex", flexDirection: "column" }}
           >
-            {/* ヘッダー */}
             <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "0 20px", marginBottom: 28 }}>
               <button
                 onClick={() => setView("home")}
@@ -217,10 +276,8 @@ export default function HomePage() {
               </h2>
             </div>
 
-            {/* カーテン（全幅） */}
             <ColorTimeline entries={entries} ym={ym} />
 
-            {/* サマリー・壁紙 */}
             <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: "28px 20px 0" }}>
               <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 14, padding: "16px 20px" }}>
                 {monthSummary ? (
@@ -265,7 +322,7 @@ export default function HomePage() {
             key="push-ad"
             position="push"
             onComplete={handleAdComplete}
-            onCancel={() => { setShowAd(false); setAnalyzing(false); setPendingResult(null); }}
+            onCancel={() => { setShowAd(false); }}
           />
         )}
       </AnimatePresence>

@@ -1,43 +1,99 @@
-import type { DiaryEntry, AnalyzeResult } from "./types";
+import type { DiaryEntry, AnalyzeResult, DailyFragment } from "./types";
 
-const KEY = "aurora_diary_entries";
+const ENTRY_KEY = "aurora_diary_entries";
+const FRAGMENT_KEY = "aurora_diary_fragments";
 
-function loadAll(): DiaryEntry[] {
+// ── entries ──────────────────────────────────────────
+
+function loadAllEntries(): DiaryEntry[] {
   if (typeof window === "undefined") return [];
   try {
-    return JSON.parse(localStorage.getItem(KEY) ?? "[]") as DiaryEntry[];
+    const raw = JSON.parse(localStorage.getItem(ENTRY_KEY) ?? "[]") as DiaryEntry[];
+    // 旧形式（emotions/texts なし）の後方互換
+    return raw.map(e => ({
+      ...e,
+      emotions: e.emotions ?? [{ emotion: e.emotion, weight: e.intensity ?? 0.5 }],
+      texts: e.texts ?? [],
+    }));
   } catch { return []; }
 }
 
-function saveAll(entries: DiaryEntry[]): void {
-  // 直近12ヶ月分（約365件）だけ保持してlocalStorage肥大化を防ぐ
+function saveAllEntries(entries: DiaryEntry[]): void {
   const cutoff = new Date();
   cutoff.setFullYear(cutoff.getFullYear() - 1);
   const trimmed = entries.filter(e => e.date >= cutoff.toISOString().slice(0, 10));
-  localStorage.setItem(KEY, JSON.stringify(trimmed));
+  localStorage.setItem(ENTRY_KEY, JSON.stringify(trimmed));
 }
 
 export function getEntriesForMonth(ym: string): DiaryEntry[] {
-  return loadAll().filter(e => e.date.startsWith(ym));
+  return loadAllEntries().filter(e => e.date.startsWith(ym));
 }
 
-export function upsertEntry(date: string, result: AnalyzeResult, text: string): DiaryEntry {
-  const all = loadAll();
-  const existing = all.findIndex(e => e.date === date);
+export function upsertEntry(date: string, result: AnalyzeResult, texts: string[]): DiaryEntry {
+  const all = loadAllEntries();
+  const idx = all.findIndex(e => e.date === date);
   const entry: DiaryEntry = {
-    id: existing >= 0 ? all[existing].id : `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    id: idx >= 0 ? all[idx].id : `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     user_id: "local",
     date,
-    text,
+    emotions: result.emotions,
     emotion: result.emotion,
     intensity: result.intensity,
     color: result.color,
     keywords: result.keywords,
     summary: result.summary,
+    texts,
     created_at: new Date().toISOString(),
   };
-  if (existing >= 0) all[existing] = entry;
+  if (idx >= 0) all[idx] = entry;
   else all.push(entry);
-  saveAll(all);
+  saveAllEntries(all);
   return entry;
+}
+
+// ── fragments ─────────────────────────────────────────
+
+function loadAllFragments(): DailyFragment[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(localStorage.getItem(FRAGMENT_KEY) ?? "[]") as DailyFragment[];
+  } catch { return []; }
+}
+
+function saveAllFragments(fragments: DailyFragment[]): void {
+  localStorage.setItem(FRAGMENT_KEY, JSON.stringify(fragments));
+}
+
+export function getFragmentsForDate(date: string): DailyFragment[] {
+  return loadAllFragments().filter(f => f.date === date);
+}
+
+export function getAllFragments(): DailyFragment[] {
+  return loadAllFragments();
+}
+
+export function addFragment(date: string, text: string): DailyFragment {
+  const all = loadAllFragments();
+  const fragment: DailyFragment = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    date,
+    text: text.trim(),
+    created_at: new Date().toISOString(),
+  };
+  all.push(fragment);
+  saveAllFragments(all);
+  return fragment;
+}
+
+export function removeFragment(id: string): void {
+  saveAllFragments(loadAllFragments().filter(f => f.id !== id));
+}
+
+export function clearFragmentsForDate(date: string): void {
+  saveAllFragments(loadAllFragments().filter(f => f.date !== date));
+}
+
+export function getOldFragmentDates(today: string): string[] {
+  const all = loadAllFragments();
+  return [...new Set(all.filter(f => f.date < today).map(f => f.date))].sort();
 }

@@ -1,93 +1,167 @@
 "use client";
-import { useState } from "react";
-import { motion } from "framer-motion";
+import { useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import type { DailyFragment } from "@/lib/types";
 
 interface DiaryInputProps {
-  selectedDate: string; // YYYY-MM-DD
-  onDateChange: (d: string) => void;
-  onPush: (text: string) => void;
-  loading?: boolean;
+  fragments: DailyFragment[];
+  onAdd: (text: string) => void;
+  onRemove: (id: string) => void;
+  onCrystallize: () => void;
+  loading: boolean;
 }
 
-export function DiaryInput({ selectedDate, onDateChange, onPush, loading = false }: DiaryInputProps) {
+export function DiaryInput({ fragments, onAdd, onRemove, onCrystallize, loading }: DiaryInputProps) {
   const [text, setText] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const handlePush = () => {
+  const handleAdd = () => {
     const trimmed = text.trim();
-    if (!trimmed || loading) return;
-    onPush(trimmed);
+    if (!trimmed) return;
+    onAdd(trimmed);
     setText("");
+    textareaRef.current?.focus();
   };
 
-  const canPush = text.trim().length > 0 && !loading;
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleAdd();
+    }
+  };
+
+  const today = new Date();
+  const dateLabel = `${today.getMonth() + 1}月${today.getDate()}日`;
 
   return (
-    <div style={{ width: "100%", maxWidth: 400, display: "flex", flexDirection: "column", gap: 12 }}>
-      {/* 日付選択 */}
-      <input
-        type="date"
-        value={selectedDate}
-        onChange={e => onDateChange(e.target.value)}
-        style={{
-          background: "rgba(255,255,255,0.04)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          borderRadius: 10,
-          padding: "8px 14px",
-          color: "rgba(255,255,255,0.6)",
-          fontSize: 13,
-          width: "100%",
-          colorScheme: "dark",
-        }}
-      />
+    <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 10 }}>
 
-      {/* テキスト入力 */}
-      <div style={{
-        background: "rgba(255,255,255,0.04)",
-        border: "1px solid rgba(255,255,255,0.08)",
-        borderRadius: 14,
-        padding: "14px 16px",
-        display: "flex",
-        flexDirection: "column",
-        gap: 10,
-      }}>
-        <textarea
-          value={text}
-          onChange={e => setText(e.target.value.slice(0, 200))}
-          placeholder="今日の気持ちを、一言…"
-          rows={3}
-          style={{
-            color: "rgba(255,255,255,0.8)",
-            fontSize: 15,
-            lineHeight: 1.6,
-            width: "100%",
-          }}
-        />
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.2)" }}>
-            {text.length}/200
-          </span>
-          <motion.button
-            onClick={handlePush}
-            disabled={!canPush}
-            whileHover={canPush ? { scale: 1.04 } : {}}
-            whileTap={canPush ? { scale: 0.96 } : {}}
+      {/* 断片リスト */}
+      <AnimatePresence initial={false}>
+        {fragments.map(f => (
+          <motion.div
+            key={f.id}
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, x: 16, transition: { duration: 0.14 } }}
+            transition={{ duration: 0.18 }}
             style={{
-              padding: "8px 22px",
-              borderRadius: 20,
-              border: "none",
-              background: canPush ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.03)",
-              color: canPush ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.2)",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: canPush ? "pointer" : "not-allowed",
-              letterSpacing: "0.06em",
-              transition: "background 0.2s, color 0.2s",
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 10,
+              padding: "10px 14px",
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.06)",
+              borderRadius: 10,
             }}
           >
-            {loading ? "…" : "Push"}
+            <p style={{
+              flex: 1,
+              fontSize: 13,
+              color: "rgba(255,255,255,0.62)",
+              lineHeight: 1.55,
+              letterSpacing: "0.02em",
+              wordBreak: "break-all",
+            }}>
+              {f.text}
+            </p>
+            <button
+              onClick={() => onRemove(f.id)}
+              style={{
+                flexShrink: 0,
+                fontSize: 14,
+                color: "rgba(255,255,255,0.18)",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: "0 2px",
+                lineHeight: 1,
+              }}
+            >
+              ×
+            </button>
+          </motion.div>
+        ))}
+      </AnimatePresence>
+
+      {/* テキスト入力エリア */}
+      <div style={{
+        background: "rgba(255,255,255,0.03)",
+        border: "1px solid rgba(255,255,255,0.07)",
+        borderRadius: 14,
+        padding: "12px 14px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+      }}>
+        <p style={{ fontSize: 10, color: "rgba(255,255,255,0.18)", letterSpacing: "0.08em" }}>
+          {dateLabel}
+        </p>
+        <textarea
+          ref={textareaRef}
+          value={text}
+          onChange={e => setText(e.target.value.slice(0, 200))}
+          onKeyDown={handleKeyDown}
+          placeholder="今日の何かを、ひとことで"
+          rows={2}
+          style={{
+            width: "100%",
+            fontSize: 14,
+            color: "rgba(255,255,255,0.8)",
+            lineHeight: 1.6,
+            letterSpacing: "0.03em",
+            caretColor: "rgba(255,255,255,0.55)",
+          }}
+        />
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <motion.button
+            onClick={handleAdd}
+            disabled={!text.trim()}
+            whileTap={text.trim() ? { scale: 0.95 } : {}}
+            style={{
+              fontSize: 12,
+              padding: "5px 16px",
+              borderRadius: 14,
+              background: text.trim() ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(255,255,255,0.09)",
+              color: text.trim() ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.18)",
+              cursor: text.trim() ? "pointer" : "default",
+              letterSpacing: "0.04em",
+            }}
+          >
+            ＋ 追加する
           </motion.button>
         </div>
       </div>
+
+      {/* 確定ボタン（断片が 1 件以上のときのみ表示） */}
+      <AnimatePresence>
+        {fragments.length > 0 && (
+          <motion.button
+            key="crystallize"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            transition={{ duration: 0.2 }}
+            onClick={onCrystallize}
+            disabled={loading}
+            style={{
+              marginTop: 2,
+              padding: "13px 0",
+              borderRadius: 14,
+              background: loading ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.07)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              color: loading ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.55)",
+              fontSize: 13,
+              letterSpacing: "0.08em",
+              cursor: loading ? "default" : "pointer",
+              width: "100%",
+            }}
+          >
+            {loading ? "読み解いています…" : `今日の色を月に還す（${fragments.length}件）`}
+          </motion.button>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

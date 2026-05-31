@@ -201,14 +201,34 @@ export function ColorTimeline({ entries, ym }: Props) {
           >
             {selectedEntry ? (
               <>
-                <p style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginBottom: 8, letterSpacing: "0.06em" }}>
-                  {selected.slice(5).replace("-", "/")} — {EMOTION_META[selectedEntry.emotion].label}
+                {/* 日付 */}
+                <p style={{ fontSize: 11, color: "rgba(255,255,255,0.28)", marginBottom: 8, letterSpacing: "0.06em" }}>
+                  {selected.slice(5).replace("-", "/")}
                 </p>
+                {/* 感情ブレンド比 */}
+                <p style={{ fontSize: 11, color: "rgba(255,255,255,0.38)", marginBottom: 10, letterSpacing: "0.03em" }}>
+                  {(selectedEntry.emotions ?? [{ emotion: selectedEntry.emotion, weight: selectedEntry.intensity }])
+                    .sort((a, b) => b.weight - a.weight)
+                    .map(e => `${EMOTION_META[e.emotion].label} ${Math.round(e.weight * 100)}%`)
+                    .join(" / ")}
+                </p>
+                {/* サマリー */}
                 <p style={{ fontSize: 14, color: "rgba(255,255,255,0.72)", lineHeight: 1.65, letterSpacing: "0.03em" }}>
                   {selectedEntry.summary}
                 </p>
+                {/* 元テキスト群 */}
+                {(selectedEntry.texts ?? []).length > 0 && (
+                  <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 4, borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 10 }}>
+                    {(selectedEntry.texts ?? []).map((t, i) => (
+                      <p key={i} style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", letterSpacing: "0.02em", lineHeight: 1.5 }}>
+                        {t}
+                      </p>
+                    ))}
+                  </div>
+                )}
+                {/* キーワード */}
                 {selectedEntry.keywords.length > 0 && (
-                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.22)", marginTop: 8 }}>
+                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.2)", marginTop: 8 }}>
                     {selectedEntry.keywords.map(k => `#${k}`).join("  ")}
                   </p>
                 )}
