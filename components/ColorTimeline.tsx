@@ -64,6 +64,10 @@ export function ColorTimeline({ entries, ym }: Props) {
 
   const selectedEntry = selected ? (entryMap.get(selected) ?? null) : null;
 
+  // Gradient cache: keyed by "r,g,b,hasEntry" — recreated only when strip colors change, not every frame
+  const gradCacheRef = useRef<Map<string, CanvasGradient>>(new Map());
+  useEffect(() => { gradCacheRef.current.clear(); }, [entries, ym]);
+
   const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -119,14 +123,19 @@ export function ColorTimeline({ entries, ym }: Props) {
 
         const h = Math.max(24, s.baseH + wave);
 
-        // 上から下へフェードするグラデーション（布の光沢感）
+        // Gradient cache: keyed by color+hasEntry, uses fixed height so h-changes don't invalidate
         const aTop = s.hasEntry ? 0.90 : 0.22;
         const aMid = s.hasEntry ? 0.65 : 0.14;
         const aBot = s.hasEntry ? 0.28 : 0.06;
-        const grad = ctx.createLinearGradient(x, 0, x, h);
-        grad.addColorStop(0,   `rgba(${s.r},${s.g},${s.b},${aTop})`);
-        grad.addColorStop(0.5, `rgba(${s.r},${s.g},${s.b},${aMid})`);
-        grad.addColorStop(1,   `rgba(${s.r},${s.g},${s.b},${aBot})`);
+        const gradKey = `${s.r},${s.g},${s.b},${s.hasEntry ? 1 : 0}`;
+        let grad = gradCacheRef.current.get(gradKey);
+        if (!grad) {
+          grad = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
+          grad.addColorStop(0,   `rgba(${s.r},${s.g},${s.b},${aTop})`);
+          grad.addColorStop(0.5, `rgba(${s.r},${s.g},${s.b},${aMid})`);
+          grad.addColorStop(1,   `rgba(${s.r},${s.g},${s.b},${aBot})`);
+          gradCacheRef.current.set(gradKey, grad);
+        }
 
         ctx.fillStyle = grad;
         ctx.fillRect(x, 0, sw, h);
