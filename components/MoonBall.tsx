@@ -2,7 +2,7 @@
 import { useEffect, useRef } from "react";
 
 // ---- Tuning constants ----
-const PARTICLE_COUNT  = 720;
+const PARTICLE_COUNT  = 1100;
 const SPHERE_R_FACTOR = 0.44;  // radius as fraction of size
 const ROT_Y_SPEED     = 0.0018;
 const ROT_X_SPEED     = 0.0007;
