@@ -2,7 +2,7 @@
 import { useEffect, useRef } from "react";
 
 // ---- Tuning constants ----
-const PARTICLE_COUNT  = 380;
+const PARTICLE_COUNT  = 720;
 const SPHERE_R_FACTOR = 0.44;  // radius as fraction of size
 const ROT_Y_SPEED     = 0.0018;
 const ROT_X_SPEED     = 0.0007;
@@ -37,8 +37,8 @@ function spawnInSphere(R: number): Particle {
     vx: (Math.random() - 0.5) * 0.12,
     vy: (Math.random() - 0.5) * 0.12,
     vz: (Math.random() - 0.5) * 0.12,
-    size:   Math.random() * 1.4 + 0.4,
-    baseOp: Math.random() * 0.65 + 0.20,
+    size:   Math.random() * 1.0 + 0.3,
+    baseOp: Math.random() * 0.6 + 0.18,
   };
 }
 
