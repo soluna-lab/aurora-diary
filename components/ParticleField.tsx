@@ -1,38 +1,22 @@
 "use client";
 import { useEffect, useRef } from "react";
 
-// ---- Inline Value Noise (no dependencies) ----
-function hash(x: number, y: number): number {
-  const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
-  return n - Math.floor(n);
-}
-function valueNoise(x: number, y: number): number {
-  const ix = Math.floor(x), iy = Math.floor(y);
-  const fx = x - ix, fy = y - iy;
-  const ux = fx * fx * (3 - 2 * fx);
-  const uy = fy * fy * (3 - 2 * fy);
-  return (
-    hash(ix,     iy    ) * (1 - ux) * (1 - uy) +
-    hash(ix + 1, iy    ) * ux       * (1 - uy) +
-    hash(ix,     iy + 1) * (1 - ux) * uy       +
-    hash(ix + 1, iy + 1) * ux       * uy
-  );
-}
-
 // ---- Tuning constants ----
-const PARTICLE_COUNT = 60;
-const CANVAS_SCALE   = 1.6;
-const TRAIL_ALPHA    = 0.07;   // higher = shorter trail / less blur
-const NOISE_SCALE    = 0.003;  // lower = larger swirl radius
-const NOISE_SPEED    = 0.06;   // how fast flow field evolves
-const FORCE_STRENGTH = 0.011;
-const CORE_PULL      = 0.0005; // gentle pull back toward orbit radius
-const MAX_SPEED      = 1.2;
+const PARTICLE_COUNT  = 90;
+const CANVAS_SCALE    = 1.6;
+const SPHERE_R_FACTOR = 0.52;  // orbit radius as fraction of `size`
+const SPHERE_SCATTER  = 0.16;  // ±radial variance to break perfect shell
+const ROT_Y_SPEED     = 0.003; // sphere Y-rotation per frame (radians)
+const ROT_X_SPEED     = 0.001; // gentle X tilt
+const DRIFT_THETA     = 0.006; // max per-particle drift speed on sphere
+const DRIFT_PHI       = 0.004;
 
 interface Particle {
-  x: number; y: number;
-  vx: number; vy: number;
-  life: number; maxLife: number;
+  theta: number;   // longitude 0..2π
+  phi:   number;   // polar angle 0..π
+  dTheta: number;  // per-particle surface drift
+  dPhi:   number;
+  r: number;       // slight radius scatter
   size: number;
   baseOpacity: number;
 }
@@ -50,21 +34,21 @@ interface ParticleFieldProps {
   burstSignal?: number;
 }
 
-function spawnParticle(cs: number, size: number, stagger = false): Particle {
-  const angle  = Math.random() * Math.PI * 2;
-  const radius = size * 0.44 + Math.random() * size * 0.30;
-  const cx = cs / 2, cy = cs / 2;
-  const spd = Math.random() * 0.25 + 0.04;
-  const maxLife = Math.random() * 200 + 140;
+// Uniform distribution on sphere surface (avoids polar clustering)
+function uniformPhi(): number {
+  return Math.acos(2 * Math.random() - 1);
+}
+
+function spawnParticle(sphereR: number): Particle {
+  const r = sphereR * (1 - SPHERE_SCATTER + Math.random() * SPHERE_SCATTER * 2);
   return {
-    x: cx + Math.cos(angle) * radius,
-    y: cy + Math.sin(angle) * radius,
-    vx: (Math.random() - 0.5) * spd,
-    vy: (Math.random() - 0.5) * spd,
-    life: stagger ? Math.random() * maxLife : 0,
-    maxLife,
-    size: Math.random() * 2.2 + 0.8,
-    baseOpacity: Math.random() * 0.22 + 0.06,
+    theta: Math.random() * Math.PI * 2,
+    phi:   uniformPhi(),
+    dTheta: (Math.random() - 0.5) * DRIFT_THETA,
+    dPhi:   (Math.random() - 0.5) * DRIFT_PHI,
+    r,
+    size:        Math.random() * 1.2 + 0.5,
+    baseOpacity: Math.random() * 0.55 + 0.25,
   };
 }
 
@@ -74,12 +58,13 @@ export function ParticleField({ color, size, burstSignal = 0 }: ParticleFieldPro
   const burstsRef    = useRef<BurstParticle[]>([]);
   const rafRef       = useRef<number>(0);
   const prevBurstRef = useRef(0);
-  // RGB cache — parsed once on color change, never inside the draw loop
   const rgbRef       = useRef<[number, number, number]>([136, 153, 170]);
-  const timeRef      = useRef(0);
+  const rotYRef      = useRef(0);
+  const rotXRef      = useRef(0);
   const lastTsRef    = useRef<number | null>(null);
+  // Pre-allocated sort buffer — no per-frame GC
+  const sortBufRef   = useRef<{ px: number; py: number; z: number; p: Particle }[]>([]);
 
-  // Update RGB cache whenever color prop changes
   useEffect(() => {
     const r = parseInt(color.slice(1, 3), 16);
     const g = parseInt(color.slice(3, 5), 16);
@@ -87,16 +72,12 @@ export function ParticleField({ color, size, burstSignal = 0 }: ParticleFieldPro
     rgbRef.current = [r, g, b];
   }, [color]);
 
-  // Spawn / re-spawn particles when size changes
   useEffect(() => {
-    const cs = size * CANVAS_SCALE;
-    particlesRef.current = Array.from(
-      { length: PARTICLE_COUNT },
-      () => spawnParticle(cs, size, true), // stagger=true so they don't all die together
-    );
+    const sphereR = size * SPHERE_R_FACTOR;
+    particlesRef.current = Array.from({ length: PARTICLE_COUNT }, () => spawnParticle(sphereR));
+    sortBufRef.current   = Array.from({ length: PARTICLE_COUNT }, () => ({ px: 0, py: 0, z: 0, p: particlesRef.current[0] }));
   }, [size]);
 
-  // Burst trigger
   useEffect(() => {
     if (burstSignal === prevBurstRef.current) return;
     prevBurstRef.current = burstSignal;
@@ -104,19 +85,17 @@ export function ParticleField({ color, size, burstSignal = 0 }: ParticleFieldPro
     const cx = cs / 2, cy = cs / 2;
     for (let i = 0; i < 40; i++) {
       const angle = (i / 40) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
-      const spd   = Math.random() * 2.2 + 0.6;
+      const spd   = Math.random() * 2.4 + 0.8;
       burstsRef.current.push({
         x: cx, y: cy,
         vx: Math.cos(angle) * spd,
         vy: Math.sin(angle) * spd,
-        life: 0,
-        maxLife: Math.random() * 0.6 + 0.5,
-        size: Math.random() * 3.5 + 1.5,
+        life: 0, maxLife: Math.random() * 0.55 + 0.45,
+        size: Math.random() * 3 + 1.2,
       });
     }
   }, [burstSignal, size]);
 
-  // Main render loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -129,65 +108,65 @@ export function ParticleField({ color, size, burstSignal = 0 }: ParticleFieldPro
     const cx = cs / 2, cy = cs / 2;
 
     const draw = (ts: number) => {
-      // Delta-time capping — prevents particle jumps after tab switch
       if (lastTsRef.current === null) lastTsRef.current = ts;
-      const rawDt = (ts - lastTsRef.current) / 16.67; // 1.0 = one 60-fps frame
-      const dt    = Math.min(rawDt, 2.5);
+      const dt = Math.min((ts - lastTsRef.current) / 16.67, 2.5);
       lastTsRef.current = ts;
-      timeRef.current  += dt;
-      const t = timeRef.current;
 
-      // Trail: partial clear instead of full clearRect → residual glow
-      ctx.fillStyle = `rgba(0,0,3,${TRAIL_ALPHA})`;
-      ctx.fillRect(0, 0, cs, cs);
+      // Crisp clear — no trail → さらさら感
+      ctx.clearRect(0, 0, cs, cs);
 
-      const [r, g, b] = rgbRef.current; // no per-frame parseInt
+      // Advance global sphere rotation
+      rotYRef.current += ROT_Y_SPEED * dt;
+      rotXRef.current += ROT_X_SPEED * dt;
+      const cosY = Math.cos(rotYRef.current), sinY = Math.sin(rotYRef.current);
+      const cosX = Math.cos(rotXRef.current), sinX = Math.sin(rotXRef.current);
 
-      // ---- Orbital particles ----
-      for (const p of particlesRef.current) {
-        p.life += dt;
+      const [r, g, b] = rgbRef.current;
+      const ps  = particlesRef.current;
+      const buf = sortBufRef.current;
 
-        // Rebirth when lifecycle ends
-        if (p.life >= p.maxLife) {
-          Object.assign(p, spawnParticle(cs, size, false));
-          continue;
-        }
+      for (let i = 0; i < ps.length; i++) {
+        const p = ps[i];
 
-        // Value-Noise flow field → organic, non-repeating direction changes
-        const nx = p.x * NOISE_SCALE + t * NOISE_SPEED;
-        const ny = p.y * NOISE_SCALE + t * NOISE_SPEED * 0.73;
-        const noiseAngle = (valueNoise(nx, ny) * 2 - 1) * Math.PI * 2;
-        p.vx += Math.cos(noiseAngle) * FORCE_STRENGTH * dt;
-        p.vy += Math.sin(noiseAngle) * FORCE_STRENGTH * dt;
+        // Surface drift
+        p.theta += p.dTheta * dt;
+        p.phi   += p.dPhi   * dt;
+        if (p.phi <              0.05) { p.phi =              0.05; p.dPhi *= -1; }
+        if (p.phi > Math.PI  - 0.05)  { p.phi = Math.PI  - 0.05;  p.dPhi *= -1; }
 
-        // Radial tether — gentle pull toward target orbit radius
-        const dx = cx - p.x, dy = cy - p.y;
-        const dist       = Math.sqrt(dx * dx + dy * dy) || 1;
-        const targetDist = size * 0.52;
-        const stretch    = (dist - targetDist) / targetDist;
-        p.vx += (dx / dist) * stretch * CORE_PULL * dt;
-        p.vy += (dy / dist) * stretch * CORE_PULL * dt;
+        // Spherical → Cartesian
+        const sinPhi = Math.sin(p.phi);
+        let sx = p.r * sinPhi * Math.cos(p.theta);
+        let sy = p.r * sinPhi * Math.sin(p.theta);
+        let sz = p.r * Math.cos(p.phi);
 
-        // Speed clamp
-        const spd = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
-        if (spd > MAX_SPEED) { p.vx *= MAX_SPEED / spd; p.vy *= MAX_SPEED / spd; }
+        // Rotate Y-axis
+        const rx =  sx * cosY + sz * sinY;
+              sz = -sx * sinY + sz * cosY;
+        // Rotate X-axis
+        const ry =  sy * cosX - sz * sinX;
+        const rz =  sy * sinX + sz * cosX;
 
-        p.x += p.vx * dt;
-        p.y += p.vy * dt;
+        buf[i].px = cx + rx;
+        buf[i].py = cy + ry;
+        buf[i].z  = rz;
+        buf[i].p  = p;
+      }
 
-        // Opacity & size: fade-in → full → fade-out (breathe)
-        const progress = p.life / p.maxLife;
-        const envelope = progress < 0.15
-          ? progress / 0.15
-          : progress > 0.85
-          ? (1 - progress) / 0.15
-          : 1;
-        const opacity   = p.baseOpacity * envelope;
-        const drawSize  = p.size * (0.55 + 0.45 * Math.sin(progress * Math.PI));
+      // Painter's sort: back-to-front (ascending z)
+      buf.sort((a, b) => a.z - b.z);
+
+      const sphereR = size * SPHERE_R_FACTOR;
+      for (let i = 0; i < buf.length; i++) {
+        const { px, py, z, p } = buf[i];
+        const depth = (z / sphereR + 1) / 2;          // 0=back, 1=front
+        const scale   = 0.35 + 0.65 * depth;
+        const opacity = p.baseOpacity * scale;
+        const drawSz  = p.size * (0.5 + 0.5 * depth); // front particles visibly larger
 
         ctx.beginPath();
-        ctx.arc(p.x, p.y, drawSize, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${r},${g},${b},${(opacity).toFixed(3)})`;
+        ctx.arc(px, py, drawSz, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${r},${g},${b},${opacity.toFixed(3)})`;
         ctx.fill();
       }
 
@@ -196,15 +175,12 @@ export function ParticleField({ color, size, burstSignal = 0 }: ParticleFieldPro
         const bp = burstsRef.current[i];
         bp.x  += bp.vx * dt;
         bp.y  += bp.vy * dt;
-        bp.vx *= Math.pow(0.968, dt);
-        bp.vy *= Math.pow(0.968, dt);
+        bp.vx *= Math.pow(0.962, dt);
+        bp.vy *= Math.pow(0.962, dt);
         bp.life += 0.016 * dt;
 
         const tBp    = bp.life / bp.maxLife;
-        const opacity = tBp < 0.25
-          ? (tBp / 0.25) * 0.75
-          : (1 - (tBp - 0.25) / 0.75) * 0.75;
-
+        const opacity = tBp < 0.25 ? (tBp / 0.25) * 0.8 : (1 - (tBp - 0.25) / 0.75) * 0.8;
         ctx.beginPath();
         ctx.arc(bp.x, bp.y, bp.size * (1 - tBp * 0.5), 0, Math.PI * 2);
         ctx.fillStyle = `rgba(${r},${g},${b},${Math.max(0, opacity).toFixed(3)})`;
