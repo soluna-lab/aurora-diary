@@ -64,9 +64,6 @@ export function ColorTimeline({ entries, ym }: Props) {
 
   const selectedEntry = selected ? (entryMap.get(selected) ?? null) : null;
 
-  // Gradient cache: keyed by "r,g,b,hasEntry" — recreated only when strip colors change, not every frame
-  const gradCacheRef = useRef<Map<string, CanvasGradient>>(new Map());
-  useEffect(() => { gradCacheRef.current.clear(); }, [entries, ym]);
 
   const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -108,52 +105,91 @@ export function ColorTimeline({ entries, ym }: Props) {
 
       const ss = stripsRef.current;
       const n = ss.length;
+      if (n === 0) { rafRef.current = requestAnimationFrame(draw); return; }
       const sw = W / n;
       const sel = selectedRef.current;
 
+      // 低周波カーテン波で各日の高さを計算
+      const heights = ss.map((s, i) => {
+        const wave =
+          30 * Math.sin(i * 0.14 + t * 0.42) +
+          10 * Math.sin(i * 0.32 + t * 0.28) +
+           4 * Math.sin(i * 0.07 + t * 0.18);
+        return Math.max(20, s.baseH + wave);
+      });
+
+      // 水平グラデーション（記録のある日のみcolor stop・空白日は自動線形補間）
+      const hGrad = ctx.createLinearGradient(0, 0, W, 0);
+      const entryIdxs = ss.reduce<number[]>((a, s, i) => { if (s.hasEntry) a.push(i); return a; }, []);
+
+      if (entryIdxs.length === 0) {
+        const f = ss[0];
+        hGrad.addColorStop(0, `rgba(${f.r},${f.g},${f.b},0.22)`);
+        hGrad.addColorStop(1, `rgba(${f.r},${f.g},${f.b},0.22)`);
+      } else {
+        const fi = ss[entryIdxs[0]];
+        const li = ss[entryIdxs[entryIdxs.length - 1]];
+        hGrad.addColorStop(0, `rgba(${fi.r},${fi.g},${fi.b},0.9)`);
+        for (const idx of entryIdxs) {
+          const s = ss[idx];
+          hGrad.addColorStop(idx / Math.max(n - 1, 1), `rgba(${s.r},${s.g},${s.b},0.9)`);
+        }
+        hGrad.addColorStop(1, `rgba(${li.r},${li.g},${li.b},0.9)`);
+      }
+
+      // Catmull-Romスプラインで1本の滑らかな面を描く
+      // pts: strip左端(j=0..n-1) + 右端補助点(j=n)
+      const ptLen = n + 1;
+      const ptX = (j: number) => (j < n ? j * sw : W);
+      const ptY = (j: number) => (j < n ? heights[j] : heights[n - 1]);
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(0, CANVAS_H);
+      ctx.lineTo(ptX(0), ptY(0));
+
+      for (let j = 0; j < ptLen - 1; j++) {
+        const j0 = Math.max(0, j - 1);
+        const j3 = Math.min(ptLen - 1, j + 2);
+        ctx.bezierCurveTo(
+          ptX(j)     + (ptX(j + 1) - ptX(j0)) / 6, ptY(j)     + (ptY(j + 1) - ptY(j0)) / 6,
+          ptX(j + 1) - (ptX(j3)    - ptX(j))  / 6, ptY(j + 1) - (ptY(j3)    - ptY(j))  / 6,
+          ptX(j + 1), ptY(j + 1),
+        );
+      }
+
+      ctx.lineTo(W, CANVAS_H);
+      ctx.closePath();
+
+      // パス1: 水平グラデーション（横に感情色が流れる）
+      ctx.fillStyle = hGrad;
+      ctx.fill();
+
+      // パス2: destination-in で縦フェードマスク（下に向かって透明に）
+      ctx.globalCompositeOperation = 'destination-in';
+      const vGrad = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
+      vGrad.addColorStop(0,    'rgba(0,0,0,0.92)');
+      vGrad.addColorStop(0.45, 'rgba(0,0,0,0.62)');
+      vGrad.addColorStop(1,    'rgba(0,0,0,0)');
+      ctx.fillStyle = vGrad;
+      ctx.fillRect(0, 0, W, CANVAS_H);
+
+      ctx.restore();
+
+      // 選択ハイライト・今日マーカー（面の後に重ねる）
       for (let i = 0; i < n; i++) {
         const s = ss[i];
         const x = i * sw;
+        const h = heights[i];
 
-        // 多周波数の進行波 → 布が風でゆれる裾の動き
-        const wave =
-          18 * Math.sin(i * 0.38 + t * 0.85) +
-          10 * Math.sin(i * 0.71 + t * 0.52) +
-           5 * Math.sin(i * 0.19 + t * 1.30);
-
-        const h = Math.max(24, s.baseH + wave);
-
-        // Gradient cache: keyed by color+hasEntry, uses fixed height so h-changes don't invalidate
-        const aTop = s.hasEntry ? 0.90 : 0.22;
-        const aMid = s.hasEntry ? 0.65 : 0.14;
-        const aBot = s.hasEntry ? 0.28 : 0.06;
-        const gradKey = `${s.r},${s.g},${s.b},${s.hasEntry ? 1 : 0}`;
-        let grad = gradCacheRef.current.get(gradKey);
-        if (!grad) {
-          grad = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
-          grad.addColorStop(0,   `rgba(${s.r},${s.g},${s.b},${aTop})`);
-          grad.addColorStop(0.5, `rgba(${s.r},${s.g},${s.b},${aMid})`);
-          grad.addColorStop(1,   `rgba(${s.r},${s.g},${s.b},${aBot})`);
-          gradCacheRef.current.set(gradKey, grad);
-        }
-
-        ctx.fillStyle = grad;
-        ctx.fillRect(x, 0, sw, h);
-
-        // ストリップ間の薄い影で布の縫い目・折り感
-        ctx.fillStyle = "rgba(0,0,3,0.12)";
-        ctx.fillRect(x + sw - 0.8, 0, 0.8, h);
-
-        // 選択ハイライト
         if (s.date === sel) {
-          ctx.strokeStyle = "rgba(255,255,255,0.38)";
+          ctx.strokeStyle = 'rgba(255,255,255,0.38)';
           ctx.lineWidth = 1;
           ctx.strokeRect(x + 0.5, 0.5, sw - 1, h - 1);
         }
 
-        // 今日マーカー（上端の白ライン）
         if (s.isToday) {
-          ctx.fillStyle = "rgba(255,255,255,0.85)";
+          ctx.fillStyle = 'rgba(255,255,255,0.85)';
           ctx.fillRect(x, 0, sw, 2);
         }
       }
