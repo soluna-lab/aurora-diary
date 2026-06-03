@@ -359,7 +359,7 @@ export default function HomePage() {
               </div>
             )}
 
-            <ColorTimeline entries={entries} ym={ym} onDelete={handleDeleteEntry} />
+            <ColorTimeline entries={entries} ym={ym} />
 
             <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: "28px 20px 0" }}>
               <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 14, padding: "16px 20px" }}>

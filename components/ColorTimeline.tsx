@@ -7,7 +7,6 @@ import { EMOTION_META, blendColors } from "@/lib/emotions";
 interface Props {
   entries: DiaryEntry[];
   ym: string;
-  onDelete?: (date: string) => void;
 }
 
 interface Strip {
@@ -72,7 +71,7 @@ function rgbToHex6(r: number, g: number, b: number): string {
 
 const CANVAS_H = 220;
 
-export function ColorTimeline({ entries, ym, onDelete }: Props) {
+export function ColorTimeline({ entries, ym }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
   const selectedRef = useRef<string | null>(null);
@@ -356,17 +355,6 @@ export function ColorTimeline({ entries, ym, onDelete }: Props) {
                   <p style={{ fontSize: 11, color: "rgba(255,255,255,0.2)", marginTop: 8 }}>
                     {selectedEntry.keywords.map(k => `#${k}`).join("  ")}
                   </p>
-                )}
-                {/* 削除ボタン */}
-                {onDelete && (
-                  <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.04)", display: "flex", justifyContent: "flex-end" }}>
-                    <button
-                      onClick={() => { onDelete(selected!); setSelected(null); }}
-                      style={{ fontSize: 11, color: "rgba(255,255,255,0.18)", background: "none", border: "none", cursor: "pointer", letterSpacing: "0.05em" }}
-                    >
-                      この日の記録を削除
-                    </button>
-                  </div>
                 )}
               </>
             ) : (
