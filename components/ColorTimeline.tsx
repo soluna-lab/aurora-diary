@@ -69,7 +69,7 @@ function rgbToHex6(r: number, g: number, b: number): string {
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
 
-const CANVAS_H = 220;
+const CANVAS_H = 320;
 
 export function ColorTimeline({ entries, ym }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -92,7 +92,7 @@ export function ColorTimeline({ entries, ym }: Props) {
     const [r, g, b] = hexToRgb(entry?.color ?? avgColor);
     return {
       date,
-      baseH: entry ? Math.round(82 + entry.intensity * 102) : 0,
+      baseH: entry ? Math.round(110 + entry.intensity * 140) : 0,
       hasEntry: !!entry,
       entry,
       r, g, b,
@@ -116,7 +116,7 @@ export function ColorTimeline({ entries, ym }: Props) {
     } else if (ni >= 0) {
       baseH = nH;
     } else {
-      baseH = 120;
+      baseH = 170;
     }
     return { ...strip, baseH };
   });
@@ -171,10 +171,10 @@ export function ColorTimeline({ entries, ym }: Props) {
       // 低周波カーテン波で各日の高さを計算
       const heights = ss.map((s, i) => {
         const wave =
-          30 * Math.sin(i * 0.14 + t * 0.42) +
-          10 * Math.sin(i * 0.32 + t * 0.28) +
-           4 * Math.sin(i * 0.07 + t * 0.18);
-        return Math.max(20, s.baseH + wave);
+          42 * Math.sin(i * 0.14 + t * 0.42) +
+          14 * Math.sin(i * 0.32 + t * 0.28) +
+           6 * Math.sin(i * 0.07 + t * 0.18);
+        return Math.max(30, s.baseH + wave);
       });
 
       // 水平グラデーション（Oklab補間 — 記録日間を知覚的に自然な色でブレンド）

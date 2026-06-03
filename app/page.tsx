@@ -321,7 +321,7 @@ export default function HomePage() {
             initial={{ opacity: 0, x: 30 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -30 }}
-            style={{ width: "100%", maxWidth: 480, paddingTop: 48, paddingBottom: 60, display: "flex", flexDirection: "column" }}
+            style={{ width: "100%", maxWidth: 480, paddingTop: 28, paddingBottom: 60, display: "flex", flexDirection: "column" }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "0 20px", marginBottom: 20 }}>
               <button
@@ -335,33 +335,9 @@ export default function HomePage() {
               </h2>
             </div>
 
-            {entries.length > 0 && (
-              <div style={{ padding: "0 20px 20px" }}>
-                <div style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "14px 18px",
-                  background: "rgba(255,255,255,0.03)",
-                  border: "1px solid rgba(255,255,255,0.07)",
-                  borderRadius: 14,
-                }}>
-                  <div>
-                    <p style={{ fontSize: 11, color: "rgba(255,255,255,0.28)", letterSpacing: "0.06em", marginBottom: 2 }}>
-                      {monthLabel(ym)}の軌跡
-                    </p>
-                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.18)", letterSpacing: "0.02em" }}>
-                      {entries.length}日分の色
-                    </p>
-                  </div>
-                  <WallpaperExport moonColor={moonColor} month={monthLabel(ym)} entryCount={entries.length} />
-                </div>
-              </div>
-            )}
-
             <ColorTimeline entries={entries} ym={ym} />
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: "28px 20px 0" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: "24px 20px 0" }}>
               <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 14, padding: "16px 20px" }}>
                 {monthSummary ? (
                   <p style={{ fontSize: 14, color: "rgba(255,255,255,0.65)", lineHeight: 1.7, letterSpacing: "0.04em" }}>
@@ -390,6 +366,28 @@ export default function HomePage() {
                   </div>
                 )}
               </div>
+
+              {entries.length > 0 && (
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "14px 18px",
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.07)",
+                  borderRadius: 14,
+                }}>
+                  <div>
+                    <p style={{ fontSize: 11, color: "rgba(255,255,255,0.28)", letterSpacing: "0.06em", marginBottom: 2 }}>
+                      {monthLabel(ym)}の軌跡
+                    </p>
+                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.18)", letterSpacing: "0.02em" }}>
+                      {entries.length}日分の色
+                    </p>
+                  </div>
+                  <WallpaperExport moonColor={moonColor} month={monthLabel(ym)} entryCount={entries.length} />
+                </div>
+              )}
             </div>
           </motion.div>
         )}
