@@ -98,6 +98,10 @@ export function getOldFragmentDates(today: string): string[] {
   return [...new Set(all.filter(f => f.date < today).map(f => f.date))].sort();
 }
 
+export function deleteEntry(date: string): void {
+  saveAllEntries(loadAllEntries().filter(e => e.date !== date));
+}
+
 export function getTodayEntry(): DiaryEntry | null {
   const today = new Date().toISOString().slice(0, 10);
   return loadAllEntries().find(e => e.date === today) ?? null;

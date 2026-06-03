@@ -12,7 +12,7 @@ import { logEvent, initSessionTracking } from "@/lib/logEvent";
 import {
   getEntriesForMonth, upsertEntry,
   getFragmentsForDate, getAllFragments, addFragment, removeFragment,
-  clearFragmentsForDate, getOldFragmentDates, getTodayEntry, getStreak,
+  clearFragmentsForDate, getOldFragmentDates, getTodayEntry, getStreak, deleteEntry,
 } from "@/lib/storage";
 import { blendColors } from "@/lib/emotions";
 import type { DiaryEntry, DailyFragment, AnalyzeResult } from "@/lib/types";
@@ -187,6 +187,12 @@ export default function HomePage() {
     logEvent("particle_burst");
   }, []);
 
+  const handleDeleteEntry = useCallback((date: string) => {
+    deleteEntry(date);
+    loadEntries();
+    logEvent("entry_delete", { date });
+  }, [loadEntries]);
+
   const handleMonthView = useCallback(() => {
     setView("month");
     logEvent("month_view_open");
@@ -275,9 +281,15 @@ export default function HomePage() {
                     borderRadius: 10,
                   }}
                 >
-                  <p style={{ fontSize: 10, color: "rgba(255,255,255,0.22)", letterSpacing: "0.06em", marginBottom: 4 }}>
-                    今日の色
-                  </p>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+                    <p style={{ fontSize: 10, color: "rgba(255,255,255,0.22)", letterSpacing: "0.06em" }}>今日の色</p>
+                    <button
+                      onClick={() => handleDeleteEntry(todayStr())}
+                      style={{ fontSize: 10, color: "rgba(255,255,255,0.15)", background: "none", border: "none", cursor: "pointer", letterSpacing: "0.04em", flexShrink: 0 }}
+                    >
+                      削除
+                    </button>
+                  </div>
                   <p style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", lineHeight: 1.55, letterSpacing: "0.02em" }}>
                     {todayEntry.summary}
                   </p>
@@ -347,7 +359,7 @@ export default function HomePage() {
               </div>
             )}
 
-            <ColorTimeline entries={entries} ym={ym} />
+            <ColorTimeline entries={entries} ym={ym} onDelete={handleDeleteEntry} />
 
             <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: "28px 20px 0" }}>
               <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 14, padding: "16px 20px" }}>
