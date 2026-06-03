@@ -32,6 +32,44 @@ function hexToRgb(hex: string): [number, number, number] {
   return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
 }
 
+// Oklab補間 — RGBより人間の知覚に自然な中間色を生成する（虹色アーティファクト抑制）
+function hexToOklab(hex: string): [number, number, number] {
+  const [ri, gi, bi] = hexToRgb(hex);
+  const lin = (v: number) => { const c = v / 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  const r = lin(ri), g = lin(gi), b = lin(bi);
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return [
+    0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+    1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+    0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s,
+  ];
+}
+
+function oklabToRgb255(L: number, a: number, b: number): [number, number, number] {
+  const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+  const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+  const s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+  const rl = l_ ** 3, gm = m_ ** 3, bs = s_ ** 3;
+  const clamp = (v: number) => Math.max(0, Math.min(1, v));
+  const r = clamp(+4.0767416621 * rl - 3.3077115913 * gm + 0.2309699292 * bs);
+  const g = clamp(-1.2684380046 * rl + 2.6097574011 * gm - 0.3413193965 * bs);
+  const bv = clamp(-0.0041960863 * rl - 0.7034186147 * gm + 1.7076147010 * bs);
+  const gam = (c: number) => Math.round((c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055) * 255);
+  return [gam(r), gam(g), gam(bv)];
+}
+
+function lerpOklab(hex1: string, hex2: string, t: number): [number, number, number] {
+  const [L1, a1, b1] = hexToOklab(hex1);
+  const [L2, a2, b2] = hexToOklab(hex2);
+  return oklabToRgb255(L1 + t * (L2 - L1), a1 + t * (a2 - a1), b1 + t * (b2 - b1));
+}
+
+function rgbToHex6(r: number, g: number, b: number): string {
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
+
 const CANVAS_H = 220;
 
 export function ColorTimeline({ entries, ym, onDelete }: Props) {
@@ -140,23 +178,43 @@ export function ColorTimeline({ entries, ym, onDelete }: Props) {
         return Math.max(20, s.baseH + wave);
       });
 
-      // 水平グラデーション（記録のある日のみcolor stop・空白日は自動線形補間）
+      // 水平グラデーション（Oklab補間 — 記録日間を知覚的に自然な色でブレンド）
       const hGrad = ctx.createLinearGradient(0, 0, W, 0);
       const entryIdxs = ss.reduce<number[]>((a, s, i) => { if (s.hasEntry) a.push(i); return a; }, []);
+      const posOf = (idx: number) => Math.min(1, Math.max(0, idx / Math.max(n - 1, 1)));
+      const addStop = (r: number, g: number, b: number, a: number, pos: number) =>
+        hGrad.addColorStop(pos, `rgba(${r},${g},${b},${a})`);
 
       if (entryIdxs.length === 0) {
         const f = ss[0];
-        hGrad.addColorStop(0, `rgba(${f.r},${f.g},${f.b},0.22)`);
-        hGrad.addColorStop(1, `rgba(${f.r},${f.g},${f.b},0.22)`);
+        addStop(f.r, f.g, f.b, 0.22, 0);
+        addStop(f.r, f.g, f.b, 0.22, 1);
       } else {
+        const STEPS = 8;
         const fi = ss[entryIdxs[0]];
         const li = ss[entryIdxs[entryIdxs.length - 1]];
-        hGrad.addColorStop(0, `rgba(${fi.r},${fi.g},${fi.b},0.9)`);
-        for (const idx of entryIdxs) {
-          const s = ss[idx];
-          hGrad.addColorStop(idx / Math.max(n - 1, 1), `rgba(${s.r},${s.g},${s.b},0.9)`);
+        addStop(fi.r, fi.g, fi.b, 0.9, 0);
+
+        for (let k = 0; k < entryIdxs.length; k++) {
+          const i1 = entryIdxs[k];
+          const s1 = ss[i1];
+          addStop(s1.r, s1.g, s1.b, 0.9, posOf(i1));
+
+          if (k < entryIdxs.length - 1) {
+            const i2 = entryIdxs[k + 1];
+            const s2 = ss[i2];
+            const hex1 = rgbToHex6(s1.r, s1.g, s1.b);
+            const hex2 = rgbToHex6(s2.r, s2.g, s2.b);
+            // 隣接記録日間をOklabでSTEPS分割して補間stop追加
+            for (let step = 1; step < STEPS; step++) {
+              const t = step / STEPS;
+              const [br, bg, bb] = lerpOklab(hex1, hex2, t);
+              addStop(br, bg, bb, 0.9, posOf(i1 + t * (i2 - i1)));
+            }
+          }
         }
-        hGrad.addColorStop(1, `rgba(${li.r},${li.g},${li.b},0.9)`);
+
+        addStop(li.r, li.g, li.b, 0.9, 1);
       }
 
       // Catmull-Romスプラインで1本の滑らかな面を描く
