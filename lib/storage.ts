@@ -97,3 +97,31 @@ export function getOldFragmentDates(today: string): string[] {
   const all = loadAllFragments();
   return [...new Set(all.filter(f => f.date < today).map(f => f.date))].sort();
 }
+
+export function getTodayEntry(): DiaryEntry | null {
+  const today = new Date().toISOString().slice(0, 10);
+  return loadAllEntries().find(e => e.date === today) ?? null;
+}
+
+export function getStreak(): number {
+  const all = loadAllEntries();
+  if (all.length === 0) return 0;
+  const dateSet = new Set(all.map(e => e.date));
+  const DAY = 86400000;
+  const toDate = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+
+  // UTC midnight of today
+  const now = Date.now();
+  const todayMs = now - (now % DAY);
+
+  // Start from today; if no entry today, allow yesterday (streak still alive)
+  let startMs = todayMs;
+  if (!dateSet.has(toDate(startMs))) {
+    startMs -= DAY;
+    if (!dateSet.has(toDate(startMs))) return 0;
+  }
+
+  let streak = 0;
+  for (let ms = startMs; dateSet.has(toDate(ms)); ms -= DAY) streak++;
+  return streak;
+}

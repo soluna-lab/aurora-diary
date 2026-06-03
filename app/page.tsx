@@ -12,11 +12,12 @@ import { logEvent, initSessionTracking } from "@/lib/logEvent";
 import {
   getEntriesForMonth, upsertEntry,
   getFragmentsForDate, getAllFragments, addFragment, removeFragment,
-  clearFragmentsForDate, getOldFragmentDates,
+  clearFragmentsForDate, getOldFragmentDates, getTodayEntry, getStreak,
 } from "@/lib/storage";
 import { blendColors } from "@/lib/emotions";
 import type { DiaryEntry, DailyFragment, AnalyzeResult } from "@/lib/types";
 import dynamic from "next/dynamic";
+import { OnboardingOverlay } from "@/components/OnboardingOverlay";
 
 const WallpaperExport = dynamic(
   () => import("@/components/WallpaperExport").then(m => ({ default: m.WallpaperExport })),
@@ -52,7 +53,11 @@ export default function HomePage() {
   const [showSummaryAd, setShowSummaryAd] = useState(false);
   const [monthSummary, setMonthSummary] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [todayEntry, setTodayEntry] = useState<DiaryEntry | null>(null);
+  const [streak, setStreak] = useState(0);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const moonRef = useRef<HTMLDivElement>(null);
+  const streakLoggedRef = useRef(false);
 
   const ym = currentMonth();
 
@@ -60,6 +65,8 @@ export default function HomePage() {
     const data = getEntriesForMonth(ym);
     setEntries(data);
     setMoonColor(blendColors(data.map(e => ({ color: e.color, intensity: e.intensity }))));
+    setTodayEntry(getTodayEntry());
+    setStreak(getStreak());
   }, [ym]);
 
   const loadFragments = useCallback(() => {
@@ -97,8 +104,16 @@ export default function HomePage() {
     loadEntries();
     loadFragments();
     autocrystallizeOld();
+    if (localStorage.getItem("aurora_onboarded") !== "1") setShowOnboarding(true);
     return cleanup;
   }, [loadEntries, loadFragments, autocrystallizeOld]);
+
+  useEffect(() => {
+    if (streak > 1 && !streakLoggedRef.current) {
+      logEvent("streak_view", { days: streak });
+      streakLoggedRef.current = true;
+    }
+  }, [streak]);
 
   // 断片追加（API 不使用）
   const handleAddFragment = useCallback((text: string) => {
@@ -233,6 +248,12 @@ export default function HomePage() {
               <MoonBall color={moonColor} size={240} pulseSignal={pulseSignal} />
             </div>
 
+            {streak > 1 && (
+              <p style={{ fontSize: 11, color: "rgba(255,255,255,0.2)", letterSpacing: "0.1em", marginBottom: 10 }}>
+                {streak}日連続
+              </p>
+            )}
+
             <button
               onClick={handleMonthView}
               style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", background: "none", border: "none", cursor: "pointer", marginBottom: 24, letterSpacing: "0.08em" }}
@@ -240,7 +261,33 @@ export default function HomePage() {
               {monthLabel(ym)} の流れを見る →
             </button>
 
-            <div style={{ width: "100%" }}>
+            <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 10 }}>
+              {todayEntry && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                  style={{
+                    padding: "12px 16px",
+                    background: "rgba(255,255,255,0.03)",
+                    border: "1px solid rgba(255,255,255,0.06)",
+                    borderLeft: `3px solid ${todayEntry.color}`,
+                    borderRadius: 10,
+                  }}
+                >
+                  <p style={{ fontSize: 10, color: "rgba(255,255,255,0.22)", letterSpacing: "0.06em", marginBottom: 4 }}>
+                    今日の色
+                  </p>
+                  <p style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", lineHeight: 1.55, letterSpacing: "0.02em" }}>
+                    {todayEntry.summary}
+                  </p>
+                  {todayEntry.keywords.length > 0 && (
+                    <p style={{ fontSize: 11, color: "rgba(255,255,255,0.22)", marginTop: 6 }}>
+                      {todayEntry.keywords.map(k => `#${k}`).join("  ")}
+                    </p>
+                  )}
+                </motion.div>
+              )}
               <DiaryInput
                 fragments={fragments}
                 onAdd={handleAddFragment}
@@ -264,7 +311,7 @@ export default function HomePage() {
             exit={{ opacity: 0, x: -30 }}
             style={{ width: "100%", maxWidth: 480, paddingTop: 48, paddingBottom: 60, display: "flex", flexDirection: "column" }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "0 20px", marginBottom: 28 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "0 20px", marginBottom: 20 }}>
               <button
                 onClick={() => setView("home")}
                 style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", background: "none", border: "none", cursor: "pointer" }}
@@ -275,6 +322,30 @@ export default function HomePage() {
                 {monthLabel(ym)}
               </h2>
             </div>
+
+            {entries.length > 0 && (
+              <div style={{ padding: "0 20px 20px" }}>
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "14px 18px",
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.07)",
+                  borderRadius: 14,
+                }}>
+                  <div>
+                    <p style={{ fontSize: 11, color: "rgba(255,255,255,0.28)", letterSpacing: "0.06em", marginBottom: 2 }}>
+                      {monthLabel(ym)}の軌跡
+                    </p>
+                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.18)", letterSpacing: "0.02em" }}>
+                      {entries.length}日分の色
+                    </p>
+                  </div>
+                  <WallpaperExport moonColor={moonColor} month={monthLabel(ym)} entryCount={entries.length} />
+                </div>
+              </div>
+            )}
 
             <ColorTimeline entries={entries} ym={ym} />
 
@@ -306,10 +377,6 @@ export default function HomePage() {
                     )}
                   </div>
                 )}
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "center" }}>
-                <WallpaperExport moonColor={moonColor} month={monthLabel(ym)} entryCount={entries.length} />
               </div>
             </div>
           </motion.div>
@@ -346,6 +413,15 @@ export default function HomePage() {
             moonCenter={orbProps.moonCenter}
             startPos={orbProps.startPos}
             onAbsorbed={handleOrbAbsorbed}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showOnboarding && (
+          <OnboardingOverlay
+            key="onboarding"
+            onDone={() => setShowOnboarding(false)}
           />
         )}
       </AnimatePresence>
