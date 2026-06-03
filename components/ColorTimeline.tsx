@@ -48,18 +48,39 @@ export function ColorTimeline({ entries, ym }: Props) {
   const avgColor = blendColors(entries.map(e => ({ color: e.color, intensity: e.intensity })));
   const days = getDaysInMonth(ym);
 
-  stripsRef.current = days.map(date => {
+  // パス1: 記録日は intensity → baseH、空白日は仮置き 0
+  const rawStrips = days.map(date => {
     const entry = entryMap.get(date) ?? null;
-    const color = entry?.color ?? avgColor;
-    const [r, g, b] = hexToRgb(color);
+    const [r, g, b] = hexToRgb(entry?.color ?? avgColor);
     return {
       date,
-      baseH: entry ? Math.round(82 + entry.intensity * 102) : 68,
+      baseH: entry ? Math.round(82 + entry.intensity * 102) : 0,
       hasEntry: !!entry,
       entry,
       r, g, b,
       isToday: date === todayStr,
     };
+  });
+
+  // パス2: 空白日の baseH を前後の記録日から線形補間（へこみをなくす）
+  stripsRef.current = rawStrips.map((strip, i, arr) => {
+    if (strip.hasEntry) return strip;
+    let pi = -1, ni = -1;
+    for (let j = i - 1; j >= 0; j--) { if (arr[j].hasEntry) { pi = j; break; } }
+    for (let j = i + 1; j < arr.length; j++) { if (arr[j].hasEntry) { ni = j; break; } }
+    const pH = pi >= 0 ? arr[pi].baseH : 0;
+    const nH = ni >= 0 ? arr[ni].baseH : 0;
+    let baseH: number;
+    if (pi >= 0 && ni >= 0) {
+      baseH = Math.round(pH + (nH - pH) * (i - pi) / (ni - pi));
+    } else if (pi >= 0) {
+      baseH = pH;
+    } else if (ni >= 0) {
+      baseH = nH;
+    } else {
+      baseH = 120;
+    }
+    return { ...strip, baseH };
   });
 
   const selectedEntry = selected ? (entryMap.get(selected) ?? null) : null;
