@@ -25,18 +25,18 @@ export function blendEmotionColors(emotions: EmotionWeight[]): string {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
-// 月の全エントリーから月の色をブレンド（ColorTimeline の平均色用）
+// 月の全エントリーから月の色をブレンド（1日1票・均等平均）
+// 「毎日書いた色が等しく月に混ざる」という設計意図に基づき intensity で重み付けしない
 export function blendColors(entries: { color: string; intensity: number }[]): string {
   if (entries.length === 0) return "#8899aa";
-  let r = 0, g = 0, b = 0, total = 0;
+  let r = 0, g = 0, b = 0;
   for (const e of entries) {
     const hex = e.color.replace("#", "");
-    r += parseInt(hex.slice(0, 2), 16) * e.intensity;
-    g += parseInt(hex.slice(2, 4), 16) * e.intensity;
-    b += parseInt(hex.slice(4, 6), 16) * e.intensity;
-    total += e.intensity;
+    r += parseInt(hex.slice(0, 2), 16);
+    g += parseInt(hex.slice(2, 4), 16);
+    b += parseInt(hex.slice(4, 6), 16);
   }
-  if (total === 0) return "#8899aa";
-  const toHex = (v: number) => Math.round(v / total).toString(16).padStart(2, "0");
+  const n = entries.length;
+  const toHex = (v: number) => Math.round(v / n).toString(16).padStart(2, "0");
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
