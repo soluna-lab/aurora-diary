@@ -385,9 +385,17 @@ export default function HomePage() {
                       {entries.length}日分の色
                     </p>
                   </div>
-                  <WallpaperExport moonColor={moonColor} month={monthLabel(ym)} entryCount={entries.length} />
+                  <WallpaperExport moonColor={moonColor} month={monthLabel(ym)} entryCount={entries.length} summary={monthSummary} />
                 </div>
               )}
+              <div style={{ paddingTop: 8, textAlign: "center" }}>
+                <a
+                  href="/privacy"
+                  style={{ fontSize: 10, color: "rgba(255,255,255,0.12)", letterSpacing: "0.06em", textDecoration: "none" }}
+                >
+                  プライバシーポリシー
+                </a>
+              </div>
             </div>
           </motion.div>
         )}
