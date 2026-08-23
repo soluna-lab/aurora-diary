@@ -74,6 +74,15 @@ export default function PrivacyPage() {
         プライバシーに関するご質問は、アプリ内のフィードバック機能またはGitHubのIssueよりお問い合わせください。
       </Section>
 
+      <Section title="7. 用語解説・チュートリアル">
+        <p style={{ marginBottom: 12 }}>AuroraDiaryの各機能や用語についての簡単な説明とチュートリアル動画を公開しています。</p>
+        <ul style={{ paddingLeft: 18, margin: 0 }}>
+          <li style={{ marginBottom: 8 }}><strong>色と揺らぎ</strong>：感情の強度や変化を視覚的に表現したものです。診断や点数化は行いません。</li>
+          <li style={{ marginBottom: 8 }}><strong>localStorage</strong>：お使いの端末内にのみデータが保存されるブラウザの仕組みです。サーバーには残りません。</li>
+          <li><strong>使い方ガイド・動画</strong>：ホーム画面のヘルプより、各機能の操作手順を動画でご確認いただけます。</li>
+        </ul>
+      </Section>
+
       <p style={{ marginTop: 48, fontSize: 11, color: "rgba(255,255,255,0.15)" }}>
         © 2026 SOLUNA HOLDINGS — AuroraDiary
       </p>
